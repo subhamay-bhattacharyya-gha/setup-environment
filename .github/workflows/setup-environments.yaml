@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   setup-environments:
-    name: Setup Environments
+    name: Environments Setup
     runs-on: ubuntu-latest
 
     steps:
