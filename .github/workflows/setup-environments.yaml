@@ -87,3 +87,18 @@ jobs:
 
             echo "::endgroup::"
           done
+      - name: Restrict deployment branches for test and prod
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          for env in test prod; do
+            echo "::group::Setting deployment branch policy for $env"
+  
+            gh api --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              repos/${{ github.repository }}/environments/$env/deployment-branch-policies \
+              -f name=main \
+              -f protection_rule_required=true
+  
+            echo "::endgroup::"
+
