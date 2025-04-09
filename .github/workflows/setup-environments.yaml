@@ -1,0 +1,89 @@
+name: Setup Environments
+run-name: Setup Environments in ${{ github.ref_name }} by ${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci-environment:
+        description: "AWS Account Name for CI Environment."
+        type: string
+        required: true
+        default: "devl-ou-a"
+      devl-environment:
+        description: "AWS Account Name for Development Environment."
+        type: string
+        required: true
+        default: "devl-ou-a"
+      test-environment:
+        description: "AWS Account Name for Test Environment."
+        type: string
+        required: true
+        default: "test-ou-a"
+      prod-environment:
+        description: "AWS Account Name for Production Environment."
+        type: string
+        required: true
+        default: "prod-ou-a"
+      aws-region:
+        description: "AWS region where the services will be deployed."
+        type: string
+        required: true
+        default: us-east-1
+
+permissions:
+  contents: write
+  id-token: write
+  actions: write
+  deployments: write
+
+jobs:
+  setup-environments:
+    name: Setup Environments
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Install GitHub CLI and jq
+        run: |
+          sudo apt update
+          sudo apt install gh jq -y
+
+      - name: Create non-prod environments with secrets and variables
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          CI_ACCOUNT: ${{ github.event.inputs.ci-environment }}
+          DEVL_ACCOUNT: ${{ github.event.inputs.devl-environment }}
+          TEST_ACCOUNT: ${{ github.event.inputs.test-environment }}
+          PROD_ACCOUNT: ${{ github.event.inputs.prod-environment }}
+          AWS_ACCOUNTS: ${{ vars.AWS_ACCOUNTS }}
+          AWS_OIDC_ROLE: ${{ vars.AWS_OIDC_ROLE }}
+        run: |
+          declare -A ENV_ACCOUNT_MAP=(
+            [ci]="$CI_ACCOUNT"
+            [devl]="$DEVL_ACCOUNT"
+            [test]="$TEST_ACCOUNT"
+            [prod]="$PROD_ACCOUNT"
+          )
+
+          for env in "${!ENV_ACCOUNT_MAP[@]}"; do
+            echo "::group::Processing environment: $env"
+            account_name="${ENV_ACCOUNT_MAP[$env]}"
+            account_id=$(echo "$AWS_ACCOUNTS" | jq -r --arg name "$account_name" '.[$name]')
+
+            echo "Creating environment: $env"
+            gh api --method PUT repos/${{ github.repository }}/environments/$env
+
+            echo "Adding secret to $env"
+            gh secret set AWS_ROLE_ARN \
+              --env "$env" \
+              --body "arn:aws:iam::${account_id}:role/${AWS_OIDC_ROLE}"
+
+            echo "Adding variable to $env"
+            gh variable set AWS_REGION \
+              --env "$env" \
+              --body "${{ inputs.aws-region }}"
+
+            echo "::endgroup::"
+          done
