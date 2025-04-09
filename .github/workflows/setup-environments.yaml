@@ -102,4 +102,4 @@ jobs:
               -f protection_rule_required=true
       
             echo "::endgroup::"
-        
+          done
